@@ -11,7 +11,7 @@ zsh build.sh
 open 'dist/Mission Grid.app'
 ```
 
-Keep the app in this folder while testing. It is ad-hoc signed, not notarized. Rebuilding may require re-enabling its privacy permissions. Mission Grid registers itself to open at login on first launch; use its menu bar’s **Open at Login** item to turn that off or back on. macOS may require approval in System Settings → General → Login Items.
+For login startup, copy the built app to `/Applications` and open that copy. Keep only one copy running. It is ad-hoc signed, not notarized, so rebuilding may require re-enabling its privacy permissions. Mission Grid registers itself to open at login on first launch; use its menu bar’s **Open at Login** item to turn that off or back on. macOS may require approval in System Settings → General → Login Items.
 
 ## First run
 
@@ -21,7 +21,7 @@ The app opens a setup window and places a grid icon in the menu bar. Start remai
 2. Grant Accessibility and Screen Recording access using the app’s buttons. Relaunch if macOS requests it.
 3. In **Desktop & Dock → Mission Control**, disable automatic Space rearranging and enable switching to an application’s Space.
 4. Reserve three-finger swipes: set desktop switching to four fingers on macOS 27. Move Mission Control and App Exposé to four fingers or disable them. Disable three-finger dragging. Check the confirmation box in Mission Grid. Other gesture utilities must not bind this gesture either.
-5. Visit each desktop with Control–Left/Right or Mission Control. Stay a second on each to collect its preview. Once all previews are ready, click **Start navigation**.
+5. Wait while Mission Grid prepares previews for all desktops automatically, then click **Start navigation**. You do not need to visit each desktop.
 
 The app does not change your system preferences. No changes are needed to SIP. Previews remain in RAM and are never written or uploaded.
 
@@ -45,7 +45,7 @@ A release beyond 25% of the screen commits. A directional flick of at least one 
 
 ## Transition behavior
 
-On macOS 27, vertical swipes animate cached source and destination images up or down for 240 ms. After the overlay has rendered, the app posts a fast Dock Space switch during that animation, then keeps the overlay until both the animation and destination confirmation finish. Left and right focus an invisible anchor window on the selected Space and let macOS own the native horizontal transition. The setup window reports destination confirmation time. Visual smoothness of both vertical handoffs needs a physical trackpad check on this Mac.
+On macOS 27, vertical swipes animate cached source and destination images up or down for 240 ms. The current desktop is captured as a full display image. Inactive desktop previews are assembled from their windows using ScreenCaptureKit and the current desktop wallpaper; protected windows may appear blank, and a different wallpaper on another desktop is not reproduced. Previews refresh automatically. After the overlay has rendered, the app posts a fast Dock Space switch during that animation, then keeps the overlay until both the animation and destination confirmation finish. Left and right focus an invisible anchor window on the selected Space and let macOS own the native horizontal transition. The setup window reports destination confirmation time. Visual smoothness of both vertical handoffs needs a physical trackpad check on this Mac.
 
 ## Verification
 

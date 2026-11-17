@@ -132,7 +132,7 @@ private let log = Logger(subsystem: "local.MissionGrid", category: "handoff")
             canStart = capturedCount == desktopCount
             lastRefreshError = nil
             status = enabled ? "Active · Desktop \(currentIndex + 1)" :
-                (canStart ? "Ready. Start to enable three-finger navigation." : "Previews \(capturedCount)/\(desktopCount). Visit each desktop using Mission Control or Control–Left/Right; wait a second on each.")
+                (canStart ? "Ready. Start to enable three-finger navigation." : "Preparing desktop previews automatically · \(capturedCount)/\(desktopCount).")
         } catch {
             layoutReady = false
             if enabled { pause() }
@@ -252,7 +252,7 @@ private let log = Logger(subsystem: "local.MissionGrid", category: "handoff")
             guard let screen = NSScreen.screens.first,
                   let source = snapshots.images[layout[originIndex]],
                   let destination = snapshots.images[layout[target]] else {
-                pause(); status = "A desktop preview is missing. Visit every desktop and start again."
+                pause(); status = "A desktop preview is missing. Wait for previews to refresh, then start again."
                 return
             }
             let movingUp = sample.displacement > 0

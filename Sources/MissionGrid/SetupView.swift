@@ -40,7 +40,7 @@ struct SetupView: View {
                     Button("Open Trackpad settings") { controller.openSettings("com.apple.Trackpad-Settings.extension") }
                     Toggle("I have reserved three-finger swipes for Mission Grid.", isOn: $controller.gesturesConfirmed)
                         .disabled(controller.enabled)
-                    Text("4. Visit each desktop using Control–Left/Right or Mission Control. Wait a second on each to collect its preview.")
+                    Text("4. Mission Grid collects window previews from every desktop automatically. Wait until all previews are ready, then start navigation.")
                 }
                 .font(.callout)
 

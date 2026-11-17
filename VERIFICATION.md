@@ -37,3 +37,9 @@ The downward swipe previously bypassed the preview overlay and used the native h
 ## Launch at login
 
 Mission Grid now registers its main app with macOS ServiceManagement when launched, with an **Open at Login** menu item for changing that setting. After rebuilding and reopening, `SMAppService.mainApp.status` reported enabled and `sfltool dumpbtm` listed `local.MissionGrid` as an enabled, allowed login item pointing to `dist/Mission Grid.app`. The eight grid checks and strict code-signature verification pass. An actual logout/login cycle was not performed.
+
+## Automatic inactive-desktop previews
+
+On this Mac, ScreenCaptureKit listed normal windows on all six Spaces without switching desktops. A desktop-independent capture of an inactive Finder window returned its real contents. A full-display filter for an inactive Space failed, so Mission Grid now composes each inactive preview from its individually captured windows over the current wallpaper. A diagnostic run produced six previews from six Spaces without moving the active Space; the composed preview was visually inspected. Empty Spaces receive a wallpaper preview. Full-screen or protected window content, per-Space wallpapers, and the handoff animation still need a physical trackpad check.
+
+The updated signed build was copied to `/Applications/Mission Grid.app`, which is the path registered as the login item. The installed app reopened and displays the automatic-preview instructions. Its setup UI currently reports that Accessibility and Screen Recording access need to be granted again for the rebuilt signature, so automatic capture has not yet run inside that installed app session.
