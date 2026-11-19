@@ -98,7 +98,7 @@ import ServiceManagement
     }
     @objc private func toggleNavigation() { if controller.enabled { controller.pause() } else { showSetup(); controller.start() } }
     @objc private func quitApp() { controller.pause(); NSApp.terminate(nil) }
-    func applicationWillTerminate(_ notification: Notification) { controller.pause() }
+    func applicationWillTerminate(_ notification: Notification) { controller.shutdown() }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 }
 

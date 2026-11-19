@@ -11,7 +11,7 @@ zsh build.sh
 open 'dist/Mission Grid.app'
 ```
 
-For login startup, copy the built app to `/Applications` and open that copy. Keep only one copy running. It is ad-hoc signed, not notarized, so rebuilding may require re-enabling its privacy permissions. Mission Grid registers itself to open at login on first launch; use its menu bar’s **Open at Login** item to turn that off or back on. macOS may require approval in System Settings → General → Login Items.
+For login startup, copy the built app to `/Applications` and open that copy. Keep only one copy running. It is ad-hoc signed, not notarized, so rebuilding may require re-enabling its privacy permissions. Mission Grid registers itself to open at login on first launch; use its menu bar’s **Open at Login** item to turn that off or back on. If navigation was active before the app quit, it starts again after login once setup is ready. macOS may require approval in System Settings → General → Login Items.
 
 ## First run
 
@@ -41,7 +41,7 @@ Swipe left to select the desktop to the right; swipe upward to select the deskto
 
 A release beyond 25% of the screen commits. A directional flick of at least one screen per second also commits after a small dead zone. Short swipes return. Two-finger scrolling is left to the foreground app. Adding a fourth finger or changing contacts cancels. Finger-lift tails are coalesced for 60 ms.
 
-**Escape** cancels an active swipe and pauses. **Control–Option–Escape** pauses globally. Pause and Quit are also available in the menu bar. Sleep, session lock, display changes, permission loss, and unsupported layouts pause navigation. Mission Control remains available through **Control–Up**.
+**Escape** cancels an active swipe and pauses. **Control–Option–Escape** pauses globally. Pause and Quit are also available in the menu bar. Sleep, session lock, temporary display interruptions, permission loss, and unsupported layouts suspend navigation. It resumes after setup is valid and previews are ready. A manual Pause or Quit keeps it off. Mission Control remains available through **Control–Up**.
 
 ## Transition behavior
 

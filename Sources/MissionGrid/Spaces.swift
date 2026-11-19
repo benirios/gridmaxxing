@@ -4,7 +4,8 @@ import PrivateBridge
 
 struct GridFailure: LocalizedError {
     let message: String
-    init(_ message: String) { self.message = message }
+    let transient: Bool
+    init(_ message: String, transient: Bool = false) { self.message = message; self.transient = transient }
     var errorDescription: String? { message }
 }
 
@@ -25,7 +26,7 @@ final class Spaces {
     func read() throws -> DesktopState {
         var displayCount: UInt32 = 0
         guard CGGetActiveDisplayList(0, nil, &displayCount) == .success, displayCount > 0 else {
-            throw GridFailure("Cannot access the desktop session. Open the app from Finder in your logged-in session.")
+            throw GridFailure("Cannot access the desktop session right now.", transient: true)
         }
         guard displayCount == 1 else { throw GridFailure("Connect only one display for this prototype.") }
         guard MGSpacesAvailable() else { throw GridFailure("This macOS version does not expose the required Spaces APIs.") }
@@ -33,7 +34,7 @@ final class Spaces {
               let display = displays.first,
               let entries = display["Spaces"] as? [[String: Any]],
               let current = display["Current Space"] as? [String: Any],
-              let currentID = number(current) else { throw GridFailure("Cannot read this display’s Spaces layout.") }
+              let currentID = number(current) else { throw GridFailure("Cannot read this display’s Spaces layout right now.", transient: true) }
         let ordinaryCount = entries.filter { ($0["type"] as? NSNumber)?.intValue == 0 }.count
         guard ordinaryCount == entries.count else {
             throw GridFailure("Found \(ordinaryCount) desktops and \(entries.count - ordinaryCount) full-screen or unsupported Spaces. Exit full-screen apps first.")

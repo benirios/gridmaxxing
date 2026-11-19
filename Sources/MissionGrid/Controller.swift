@@ -18,7 +18,9 @@ private let log = Logger(subsystem: "local.MissionGrid", category: "handoff")
     @Published var gridColumns = 2
     @Published var gridRows = 2
     @Published var startIssue: String?
-    @Published var gesturesConfirmed = false
+    @Published var gesturesConfirmed = UserDefaults.standard.bool(forKey: "gesturesConfirmed") {
+        didSet { UserDefaults.standard.set(gesturesConfirmed, forKey: "gesturesConfirmed") }
+    }
     @Published var lastHandoff = "No transition tested yet."
     @Published var accessibility = false
     @Published var recording = false
@@ -46,6 +48,8 @@ private let log = Logger(subsystem: "local.MissionGrid", category: "handoff")
     private var pendingVerticalResult: (target: Int, milliseconds: Int, restored: Bool)?
     @Published private(set) var starting = false
     private var awaitingLift = false
+    private var resumeAfterInterruption = UserDefaults.standard.bool(forKey: "navigationWanted")
+    private var nextResumeAttempt: TimeInterval = 0
 
     func launch() {
         touchRecipient = self
@@ -62,13 +66,20 @@ private let log = Logger(subsystem: "local.MissionGrid", category: "handoff")
     }
 
     @objc private func displayChanged() {
-        captureEpoch += 1; pause(); layout = []; snapshots.reset(); capturedCount = 0
-        status = "Display changed. Check setup again."
+        captureEpoch += 1; suspendNavigation(); layout = []; snapshots.reset(); capturedCount = 0
+        status = "Display changed. Navigation will resume when the desktop is ready."
     }
-    @objc private func sleeping() { captureEpoch += 1; pause(); snapshots.reset(); capturedCount = 0; status = "Paused after sleep or session lock. Start again when ready." }
+    @objc private func sleeping() {
+        captureEpoch += 1; suspendNavigation(); snapshots.reset(); capturedCount = 0
+        status = "Waiting for the desktop session. Navigation will resume automatically."
+    }
     @objc private func spaceChanged() {
         captureEpoch += 1
-        if originIndex != nil && !settling { pause(); status = "A Space changed during the swipe. Start again." }
+        if originIndex != nil && !settling {
+            lift?.cancel(); lift = nil; tracker.reset(); originIndex = nil; lastSample = nil
+            awaitingLift = true
+            status = "A Space changed during the swipe. That swipe was cancelled."
+        }
     }
 
     private func preference(_ key: String, domain: String) -> Any? {
@@ -109,33 +120,56 @@ private let log = Logger(subsystem: "local.MissionGrid", category: "handoff")
             let state = try spaces.read()
             layoutReady = true
             if layout != state.ids {
-                pause(); layout = state.ids; snapshots.reset(); capturedCount = 0
+                suspendNavigation(); layout = state.ids; snapshots.reset(); capturedCount = 0
             }
             desktopCount = state.ids.count
             gridColumns = grid.columns
             gridRows = grid.rows
             currentIndex = state.ids.firstIndex(of: state.current) ?? 0
             if let issue = setupError() {
-                if enabled { pause() }
+                if enabled { suspendNavigation() }
                 canStart = false; status = issue; menuChanged?(); return
             }
+            var previewError: String?
             if originIndex == nil && !settling && !verticalOverlay.isVisible {
                 spaces.rememberFocus(on: state.current)
                 let epoch = captureEpoch
-                try await snapshots.capture(state) { [weak self] in
-                    guard let self else { return false }
-                    return self.captureEpoch == epoch && self.originIndex == nil && !self.settling &&
-                        (try? self.spaces.read().current) == state.current && self.layout == state.ids
+                do {
+                    try await snapshots.capture(state) { [weak self] in
+                        guard let self else { return false }
+                        return self.captureEpoch == epoch && self.originIndex == nil && !self.settling &&
+                            (try? self.spaces.read().current) == state.current && self.layout == state.ids
+                    }
+                } catch {
+                    previewError = error.localizedDescription
+                    if lastRefreshError != previewError {
+                        log.warning("Preview refresh: \(error.localizedDescription, privacy: .public)")
+                        lastRefreshError = previewError
+                    }
                 }
             }
             capturedCount = snapshots.images.count
             canStart = capturedCount == desktopCount
-            lastRefreshError = nil
+            if previewError == nil { lastRefreshError = nil }
             status = enabled ? "Active · Desktop \(currentIndex + 1)" :
-                (canStart ? "Ready. Start to enable three-finger navigation." : "Preparing desktop previews automatically · \(capturedCount)/\(desktopCount).")
+                (canStart ? "Ready. Start to enable three-finger navigation." :
+                    (previewError.map { "Preparing desktop previews · \(capturedCount)/\(desktopCount). \($0)" } ??
+                    "Preparing desktop previews automatically · \(capturedCount)/\(desktopCount)."))
+            if resumeAfterInterruption && !starting && canStart && gesturesConfirmed &&
+                ProcessInfo.processInfo.systemUptime >= nextResumeAttempt {
+                nextResumeAttempt = ProcessInfo.processInfo.systemUptime + 5
+                start()
+            }
         } catch {
             layoutReady = false
-            if enabled { pause() }
+            if (error as? GridFailure)?.transient == true {
+                if enabled { suspendNavigation() }
+                canStart = false
+                status = "Waiting for the desktop session. Navigation will resume automatically."
+                menuChanged?()
+                return
+            }
+            if enabled { suspendNavigation() }
             canStart = false
             status = error.localizedDescription
             if lastRefreshError != status { log.error("Setup: \(self.status, privacy: .public)"); lastRefreshError = status }
@@ -146,6 +180,7 @@ private let log = Logger(subsystem: "local.MissionGrid", category: "handoff")
     func start() {
         guard !enabled, !starting else { return }
         starting = true
+        let automaticRetry = resumeAfterInterruption
         let requestGeneration = generation
         Task {
             defer { starting = false }
@@ -169,13 +204,36 @@ private let log = Logger(subsystem: "local.MissionGrid", category: "handoff")
                     }
                 }) else { throw GridFailure("Could not start the trackpad listener. Pause other gesture tools and try again.") }
                 installEscape()
+                resumeAfterInterruption = false
+                UserDefaults.standard.set(true, forKey: "navigationWanted")
                 status = "Active · Desktop \(currentIndex + 1)"
-            } catch { pause(); status = error.localizedDescription; startIssue = status }
+            } catch {
+                if automaticRetry {
+                    suspendNavigation()
+                    status = "Waiting to resume navigation: \(error.localizedDescription)"
+                    log.warning("Automatic resume: \(error.localizedDescription, privacy: .public)")
+                } else {
+                    pause(); status = error.localizedDescription; startIssue = status
+                }
+            }
             menuChanged?()
         }
     }
 
     func pause() {
+        resumeAfterInterruption = false
+        UserDefaults.standard.set(false, forKey: "navigationWanted")
+        stopNavigation()
+    }
+
+    func shutdown() { stopNavigation() }
+
+    private func suspendNavigation() {
+        resumeAfterInterruption = resumeAfterInterruption || enabled
+        stopNavigation()
+    }
+
+    private func stopNavigation() {
         enabled = false; generation += 1; lift?.cancel(); lift = nil
         MGStopTouches(); tracker.reset(); verticalOverlay.hide(); settling = false; originIndex = nil
         verticalAnimationFinished = false; verticalHandoffFinished = false; pendingVerticalResult = nil
@@ -234,7 +292,7 @@ private let log = Logger(subsystem: "local.MissionGrid", category: "handoff")
                 spaces.rememberFocus(on: state.current)
                 originIndex = index
             }
-        } catch { pause(); status = error.localizedDescription }
+        } catch { suspendNavigation(); status = error.localizedDescription }
     }
 
     private func endSwipe(_ release: SwipeSample?) {
@@ -252,7 +310,7 @@ private let log = Logger(subsystem: "local.MissionGrid", category: "handoff")
             guard let screen = NSScreen.screens.first,
                   let source = snapshots.images[layout[originIndex]],
                   let destination = snapshots.images[layout[target]] else {
-                pause(); status = "A desktop preview is missing. Wait for previews to refresh, then start again."
+                abandonHandoff("A desktop preview is missing. This swipe was cancelled while previews refresh.")
                 return
             }
             let movingUp = sample.displacement > 0
@@ -292,33 +350,31 @@ private let log = Logger(subsystem: "local.MissionGrid", category: "handoff")
                 try spaces.switchTo(id)
             }
         }
-        catch { pause(); status = error.localizedDescription; return }
+        catch { abandonHandoff(error.localizedDescription); return }
         Task {
             var reached = false
             for _ in 0..<150 {
                 guard enabled, generation == token else { return }
                 guard let state = try? spaces.read(), state.ids == layout else {
-                    pause(); status = "Desktop layout changed during handoff."; return
+                    abandonHandoff("Desktop layout changed during handoff. This swipe was cancelled."); return
                 }
                 if state.current == id { reached = true; break }
                 try? await Task.sleep(for: .milliseconds(20))
             }
             guard enabled, generation == token else { return }
             guard reached else {
-                pause(); lastHandoff = "Failed: macOS did not activate the destination within 3 seconds."
-                status = "Handoff failed. Check application-to-Space switching in Desktop & Dock."
+                abandonHandoff("macOS did not activate the destination within 3 seconds. Try the swipe again.")
                 return
             }
             let requestedFocus = spaces.restoreFocus(on: id)
             try? await Task.sleep(for: .milliseconds(100))
             guard enabled, generation == token else { return }
             guard (try? spaces.read().current) == id else {
-                pause(); lastHandoff = "Failed: restoring application focus changed the desktop."; return
+                abandonHandoff("Restoring window focus changed the desktop. This swipe was cancelled."); return
             }
             let restored = spaces.hasFocusedWindow(on: id)
             if requestedFocus && !restored {
-                pause(); lastHandoff = "Failed: the destination was reached, but application window focus could not be confirmed."
-                return
+                log.warning("Destination reached, but window focus could not be confirmed")
             }
             let elapsed = (ProcessInfo.processInfo.systemUptime - began) * 1000
             if instant {
@@ -335,6 +391,16 @@ private let log = Logger(subsystem: "local.MissionGrid", category: "handoff")
         guard verticalAnimationFinished, verticalHandoffFinished, let result = pendingVerticalResult else { return }
         pendingVerticalResult = nil
         completeHandoff(target: result.target, milliseconds: result.milliseconds, restored: result.restored)
+    }
+
+    private func abandonHandoff(_ message: String) {
+        verticalOverlay.hide(); settling = false; originIndex = nil
+        verticalAnimationFinished = false; verticalHandoffFinished = false; pendingVerticalResult = nil
+        if let state = try? spaces.read(), let index = layout.firstIndex(of: state.current) { currentIndex = index }
+        lastHandoff = message
+        log.warning("Handoff cancelled: \(message, privacy: .public)")
+        status = "Active · \(message)"
+        menuChanged?()
     }
 
     private func completeHandoff(target: Int, milliseconds: Int, restored: Bool) {
